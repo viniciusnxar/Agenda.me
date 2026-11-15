@@ -8,9 +8,11 @@ import { requireProfile } from "@/lib/auth";
 import { PLATFORMS, toSocialHref } from "@/lib/social";
 import { isThemeKey } from "@/lib/theme";
 import {
+  bookingSettingsSchema,
   exceptionSchema,
   profileSchema,
   weeklyRulesSchema,
+  type BookingSettingsInput,
   type ExceptionInput,
   type ProfileInput,
   type WeeklyRuleInput,
@@ -277,6 +279,78 @@ export async function deleteException(id: string): Promise<ActionResult> {
   const { profile, supabase } = await requireProfile();
   const { error } = await supabase.from("availability_exceptions").delete().eq("id", id).eq("profile_id", profile.id);
   if (error) return fail("Não foi possível remover. Tente novamente.");
+
+  revalidateAvailability(profile);
+  return ok();
+}
+
+// ---------------------------------------------------------------------------
+// Regras de agendamento e planos
+// ---------------------------------------------------------------------------
+
+export async function updateBookingSettings(input: BookingSettingsInput): Promise<ActionResult> {
+  const parsed = bookingSettingsSchema.safeParse(input);
+  if (!parsed.success) return fail("Confira os campos", z.flattenError(parsed.error).fieldErrors);
+
+  const { profile, supabase } = await requireProfile();
+  const { error } = await supabase.from("booking_settings").update(parsed.data).eq("profile_id", profile.id);
+  if (error) return fail("Não foi possível salvar. Tente novamente.");
+
+  revalidateProfile(profile);
+  revalidateAvailability(profile);
+  return ok();
+}
+
+const plansSchema = z
+  .array(
+    z.object({
+      id: z.uuid().optional(),
+      name: z.string().trim().min(1, "Dê um nome ao plano").max(80, "Máximo de 80 caracteres"),
+      is_active: z.boolean(),
+    }),
+  )
+  .max(50, "Máximo de 50 planos")
+  .refine((plans) => new Set(plans.map((p) => p.name.toLowerCase())).size === plans.length, "Há planos com o mesmo nome");
+
+export type PlanInput = z.input<typeof plansSchema>[number];
+
+/**
+ * Salva a lista na ordem recebida. Diferente dos links, apaga os removidos antes do upsert
+ * (o nome é único por perfil); se o upsert falhar, só se perde o que já ia ser removido.
+ */
+export async function savePlans(input: PlanInput[]): Promise<ActionResult> {
+  const parsed = plansSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+
+  const { profile, supabase } = await requireProfile();
+  const { data: existing, error: loadError } = await supabase.from("plans").select("id").eq("profile_id", profile.id);
+  if (loadError) return fail("Não foi possível salvar. Tente novamente.");
+
+  const existingIds = new Set(existing.map((p) => p.id));
+  const rows = parsed.data.map((p, position) => ({
+    id: p.id && existingIds.has(p.id) ? p.id : crypto.randomUUID(),
+    profile_id: profile.id,
+    name: p.name,
+    is_active: p.is_active,
+    position,
+  }));
+
+  const keep = new Set(rows.map((r) => r.id));
+  const removed = [...existingIds].filter((id) => !keep.has(id));
+
+  // apaga antes: um plano removido pode ter o mesmo nome de um novo (unique por perfil)
+  if (removed.length > 0) {
+    const { error } = await supabase.from("plans").delete().in("id", removed).eq("profile_id", profile.id);
+    if (error) return fail("Não foi possível salvar. Tente novamente.");
+  }
+
+  if (rows.length > 0) {
+    const { error } = await supabase.from("plans").upsert(rows);
+    if (error) {
+      if (error.code === "23505") return fail("Há planos com o mesmo nome");
+      return fail("Não foi possível salvar. Tente novamente.");
+    }
+  }
 
   revalidateAvailability(profile);
   return ok();
