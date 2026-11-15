@@ -73,7 +73,11 @@ export async function getSlots(username: string, date: string): Promise<ActionRe
   }
 }
 
-export type CreateAppointmentInput = AppointmentInput & { source: "booking" | "whatsapp" };
+// Entrada não confiável: o zod é quem garante consent === true
+export type CreateAppointmentInput = Omit<AppointmentInput, "consent"> & {
+  consent: boolean;
+  source: "booking" | "whatsapp";
+};
 export type CreatedAppointment = { token: string; status: "pending" | "confirmed" };
 
 /**
