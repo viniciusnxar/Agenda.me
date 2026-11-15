@@ -1,4 +1,4 @@
-# AgendaLink
+# agenda.me
 
 Link da bio que também agenda consultas. Cada profissional (psicólogo, médico, nutricionista...)
 ganha uma **página pública estilo Linktree** em `/<username>`, com foto, bio, registro e cards

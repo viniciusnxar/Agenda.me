@@ -6,7 +6,7 @@ export function Logo({ className }: { className?: string }) {
   return (
     <span className={cn("inline-flex items-center gap-2 text-lg font-semibold", className)}>
       <CalendarCheck className="size-5 text-primary" aria-hidden="true" />
-      AgendaLink
+      agenda.me
     </span>
   );
 }

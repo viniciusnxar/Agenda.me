@@ -5,7 +5,7 @@ import { Logo } from "@/components/logo";
 
 export const metadata: Metadata = {
   title: "Política de privacidade",
-  description: "Como o AgendaLink trata os dados de profissionais e pacientes.",
+  description: "Como o agenda.me trata os dados de profissionais e pacientes.",
 };
 
 export default function PrivacyPage() {
@@ -21,7 +21,7 @@ export default function PrivacyPage() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Política de privacidade</h1>
           <p className="mt-2 text-muted-foreground">
-            Esta página explica, de forma simples, quais dados o AgendaLink coleta e como eles são usados, conforme
+            Esta página explica, de forma simples, quais dados o agenda.me coleta e como eles são usados, conforme
             a Lei Geral de Proteção de Dados (Lei nº 13.709/2018).
           </p>
         </div>
@@ -30,7 +30,7 @@ export default function PrivacyPage() {
           <h2 className="text-xl font-semibold">Quem é quem</h2>
           <p>
             O <strong>profissional</strong> que publica a página é o controlador dos dados dos seus pacientes: é ele
-            quem decide como atender e entrar em contato. O AgendaLink é o operador: guarda os dados e os entrega
+            quem decide como atender e entrar em contato. O agenda.me é o operador: guarda os dados e os entrega
             somente a esse profissional.
           </p>
         </section>

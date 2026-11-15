@@ -9,8 +9,8 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {
-    default: "AgendaLink",
-    template: "%s · AgendaLink",
+    default: "agenda.me",
+    template: "%s · agenda.me",
   },
   description: "Sua página de links com agenda online para profissionais.",
 };

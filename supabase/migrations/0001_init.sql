@@ -1,4 +1,4 @@
--- AgendaLink — schema inicial
+-- agenda.me — schema inicial
 -- Tabelas, anti-conflito de horários, RLS, RPC get_busy_ranges, trigger de booking_settings
 -- e bucket de avatares. Ver docs/ARCHITECTURE.md, seções 4, 5 e 6.
 

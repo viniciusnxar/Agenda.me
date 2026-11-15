@@ -12,7 +12,7 @@ export default function ProfileNotFound() {
         <p className="text-muted-foreground">Esse endereço não existe ou a página ainda não foi publicada.</p>
       </div>
       <Button asChild variant="outline">
-        <Link href="/">Conhecer o AgendaLink</Link>
+        <Link href="/">Conhecer o agenda.me</Link>
       </Button>
     </main>
   );

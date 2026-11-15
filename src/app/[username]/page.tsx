@@ -67,7 +67,7 @@ export default async function PublicProfilePage({ params }: Props) {
 
         <footer className={cn("pt-4 text-xs", theme.muted)}>
           <Link href="/" className="hover:underline">
-            Feito com AgendaLink
+            Feito com agenda.me
           </Link>
         </footer>
       </main>
