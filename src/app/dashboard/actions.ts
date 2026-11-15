@@ -5,11 +5,16 @@ import { z } from "zod";
 
 import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireProfile } from "@/lib/auth";
+import { addMinutes, zonedToUtc } from "@/lib/scheduling";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { PLATFORMS, toSocialHref } from "@/lib/social";
 import { isThemeKey } from "@/lib/theme";
 import {
   bookingSettingsSchema,
+  cpfSchema,
   exceptionSchema,
+  phoneSchema,
+  PRIVATE_PLAN,
   profileSchema,
   weeklyRulesSchema,
   type BookingSettingsInput,
@@ -353,5 +358,89 @@ export async function savePlans(input: PlanInput[]): Promise<ActionResult> {
   }
 
   revalidateAvailability(profile);
+  return ok();
+}
+
+// ---------------------------------------------------------------------------
+// Agendamento manual (source = 'manual')
+// ---------------------------------------------------------------------------
+
+const manualAppointmentSchema = z.object({
+  date: z.iso.date("Data inválida"),
+  time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido"),
+  duration_min: z.coerce.number().int().min(5, "Mínimo de 5 minutos").max(480, "Máximo de 480 minutos"),
+  client_name: z.string().trim().min(2, "Informe o nome").max(100, "Máximo de 100 caracteres"),
+  client_phone: phoneSchema,
+  client_cpf: z.preprocess((v) => (v === "" ? undefined : v), cpfSchema.optional()),
+  plan_id: z.string().optional(),
+  notes: z
+    .string()
+    .trim()
+    .max(500, "Máximo de 500 caracteres")
+    .optional()
+    .transform((v) => v || null),
+});
+
+export type ManualAppointmentInput = z.input<typeof manualAppointmentSchema>;
+
+/**
+ * O profissional encaixa um horário, inclusive fora da grade. A RLS não dá INSERT ao dono,
+ * então usa o client admin, sempre com o profile_id da sessão. Conflito continua barrado (23P01).
+ */
+export async function createManualAppointment(input: ManualAppointmentInput): Promise<ActionResult> {
+  const parsed = manualAppointmentSchema.safeParse(input);
+  if (!parsed.success) return fail("Confira os campos", z.flattenError(parsed.error).fieldErrors);
+  const data = parsed.data;
+
+  const { profile, supabase } = await requireProfile();
+
+  let planId: string | null = null;
+  let planName: string | null = null;
+  if (data.plan_id === PRIVATE_PLAN) planName = "Particular";
+  else if (data.plan_id) {
+    const { data: plan } = await supabase
+      .from("plans")
+      .select("id, name")
+      .eq("id", data.plan_id)
+      .eq("profile_id", profile.id)
+      .maybeSingle();
+    if (!plan) return fail("Confira os campos", { plan_id: ["Plano inválido"] });
+    planId = plan.id;
+    planName = plan.name;
+  }
+
+  const { data: settings } = await supabase
+    .from("booking_settings")
+    .select("buffer_min")
+    .eq("profile_id", profile.id)
+    .maybeSingle();
+
+  const startsAt = zonedToUtc(data.date, data.time, profile.timezone);
+  const endsAt = addMinutes(startsAt, data.duration_min);
+  const blockedUntil = addMinutes(endsAt, settings?.buffer_min ?? 0);
+
+  const { error } = await createAdminClient().from("appointments").insert({
+    profile_id: profile.id,
+    starts_at: startsAt.toISOString(),
+    ends_at: endsAt.toISOString(),
+    blocked_until: blockedUntil.toISOString(),
+    status: "confirmed",
+    source: "manual",
+    client_name: data.client_name,
+    client_phone: data.client_phone,
+    client_cpf: data.client_cpf ?? null,
+    plan_id: planId,
+    plan_name: planName,
+    notes: data.notes,
+  });
+
+  if (error) {
+    if (error.code === "23P01") return fail("Já existe um agendamento nesse horário (considerando o intervalo).");
+    console.error("createManualAppointment: insert falhou", error.code); // sem dados do cliente
+    return fail("Não foi possível salvar. Tente novamente.");
+  }
+
+  revalidatePath("/dashboard", "layout");
+  revalidatePath(`/${profile.username}/agendar`);
   return ok();
 }

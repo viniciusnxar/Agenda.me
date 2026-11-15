@@ -48,13 +48,7 @@ const ACTIONS: Record<string, { action: StatusAction; label: string; icon: typeo
   ],
 };
 
-export function AppointmentDetails({
-  appointment: a,
-  onChanged,
-}: {
-  appointment: AppointmentDetailsData;
-  onChanged?: (status: string) => void;
-}) {
+export function AppointmentDetails({ appointment: a }: { appointment: AppointmentDetailsData }) {
   const [pending, startTransition] = useTransition();
   const [running, setRunning] = useState<StatusAction | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
@@ -65,13 +59,9 @@ export function AppointmentDetails({
       const result = await updateAppointmentStatus(a.id, action);
       setRunning(null);
       setConfirmCancel(false);
-      if (result.ok) {
-        const next = { confirm: "confirmed", cancel: "cancelled", complete: "completed", no_show: "no_show" }[action];
-        toast.success("Agendamento atualizado");
-        onChanged?.(next);
-      } else {
-        toast.error(result.error);
-      }
+      // a action revalida o painel; o novo status chega pelas props
+      if (result.ok) toast.success("Agendamento atualizado");
+      else toast.error(result.error);
     });
   }
 

@@ -41,8 +41,8 @@ const STATUS_CHIP: Record<string, string> = {
 
 const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
 
-export function AppointmentCalendar({ view, title, days, appointments: initial, links }: AppointmentCalendarProps) {
-  const [appointments, setAppointments] = useState(initial);
+// sem cópia local: as actions chamam revalidatePath e os agendamentos chegam atualizados pelas props
+export function AppointmentCalendar({ view, title, days, appointments, links }: AppointmentCalendarProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = appointments.find((a) => a.id === selectedId) ?? null;
 
@@ -137,11 +137,7 @@ export function AppointmentCalendar({ view, title, days, appointments: initial, 
         })}
       </ol>
 
-      <AppointmentDrawer
-        appointment={selected}
-        onClose={() => setSelectedId(null)}
-        onChanged={(id, status) => setAppointments((as) => as.map((a) => (a.id === id ? { ...a, status } : a)))}
-      />
+      <AppointmentDrawer appointment={selected} onClose={() => setSelectedId(null)} />
     </div>
   );
 }

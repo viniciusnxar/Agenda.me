@@ -9,11 +9,9 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 export function AppointmentDrawer({
   appointment,
   onClose,
-  onChanged,
 }: {
   appointment: AppointmentDetailsData | null;
   onClose: () => void;
-  onChanged: (id: string, status: string) => void;
 }) {
   return (
     <Sheet open={appointment !== null} onOpenChange={(open) => !open && onClose()}>
@@ -25,11 +23,7 @@ export function AppointmentDrawer({
               <SheetDescription>Detalhes do agendamento</SheetDescription>
             </SheetHeader>
             <div className="grid gap-4 px-4 pb-6">
-              <AppointmentDetails
-                key={appointment.id + appointment.status}
-                appointment={appointment}
-                onChanged={(status) => onChanged(appointment.id, status)}
-              />
+              <AppointmentDetails key={appointment.id + appointment.status} appointment={appointment} />
               <Button asChild variant="link" className="justify-self-start px-0">
                 <Link href={`/dashboard/agendamentos/${appointment.id}`}>Ver página completa (com CPF)</Link>
               </Button>

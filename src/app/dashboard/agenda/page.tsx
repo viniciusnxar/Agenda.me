@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { AppointmentCalendar, type CalendarAppointment } from "@/components/dashboard/appointment-calendar";
+import { ManualAppointmentDialog } from "@/components/dashboard/manual-appointment-dialog";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { requireProfile } from "@/lib/auth";
 import { formatDateLong, maskCpf } from "@/lib/format";
@@ -51,13 +52,17 @@ export default async function AgendaPage({ searchParams }: Props) {
   });
 
   const { from, to } = localDaysRange(first, last, tz);
-  const { data } = await supabase
-    .from("appointments")
-    .select("id, starts_at, ends_at, status, source, client_name, client_phone, client_cpf, plan_name, notes")
-    .eq("profile_id", profile.id)
-    .gte("starts_at", from.toISOString())
-    .lt("starts_at", to.toISOString())
-    .order("starts_at");
+  const [{ data }, plansRes, settingsRes] = await Promise.all([
+    supabase
+      .from("appointments")
+      .select("id, starts_at, ends_at, status, source, client_name, client_phone, client_cpf, plan_name, notes")
+      .eq("profile_id", profile.id)
+      .gte("starts_at", from.toISOString())
+      .lt("starts_at", to.toISOString())
+      .order("starts_at"),
+    supabase.from("plans").select("id, name").eq("profile_id", profile.id).eq("is_active", true).order("position"),
+    supabase.from("booking_settings").select("slot_duration_min").eq("profile_id", profile.id).maybeSingle(),
+  ]);
 
   // CPF sai daqui já mascarado: o número completo nunca vai para a agenda (LGPD)
   const appointments: CalendarAppointment[] = (data ?? []).map((a) => ({
@@ -89,7 +94,17 @@ export default async function AgendaPage({ searchParams }: Props) {
 
   return (
     <div className="grid gap-6">
-      <PageHeader title="Agenda" description="Clique num agendamento para ver os detalhes e mudar o status." />
+      <PageHeader
+        title="Agenda"
+        description="Clique num agendamento para ver os detalhes e mudar o status."
+        actions={
+          <ManualAppointmentDialog
+            defaultDate={anchor < today ? today : anchor}
+            defaultDuration={settingsRes.data?.slot_duration_min ?? 50}
+            plans={plansRes.data ?? []}
+          />
+        }
+      />
       <AppointmentCalendar
         key={`${view}-${first}`}
         view={view}
