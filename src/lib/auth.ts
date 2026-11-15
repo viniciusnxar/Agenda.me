@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cache } from "react";
 
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,6 +33,23 @@ export async function requireUser() {
   if (!user) redirect("/login");
   return user;
 }
+
+/**
+ * Para o painel: exige sessão e perfil (sem perfil vai para o onboarding).
+ * cache() faz layout e página dividirem a mesma busca no request.
+ */
+export const requireProfile = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
+
+  const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  if (!profile) redirect("/onboarding");
+
+  return { user, profile, supabase };
+});
 
 /** Para onde mandar depois do login: quem ainda não tem perfil vai para o onboarding. */
 export async function getPostLoginPath(supabase: ServerClient, userId: string, next?: unknown): Promise<string> {
