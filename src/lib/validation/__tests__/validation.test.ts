@@ -5,9 +5,13 @@ import { isValidPhone, normalizePhone } from "@/lib/validation/phone";
 import {
   appointmentSchema,
   appointmentSchemaFor,
+  exceptionSchema,
+  findOverlap,
   bookingSettingsSchema,
   profileSchema,
   usernameSchema,
+  weeklyRuleSchema,
+  weeklyRulesSchema,
 } from "@/lib/validation/schemas";
 
 describe("isValidCpf", () => {
@@ -166,5 +170,53 @@ describe("appointmentSchemaFor", () => {
     expect(appointmentSchemaFor({ require_cpf: false, require_plan: false }).safeParse(appointment).success).toBe(
       true,
     );
+  });
+});
+
+describe("horários semanais", () => {
+  it("aceita intervalos válidos, inclusive encostados", () => {
+    const rules = [
+      { weekday: 1, start_time: "08:00", end_time: "12:00" },
+      { weekday: 1, start_time: "12:00", end_time: "14:00" },
+      { weekday: 2, start_time: "08:00", end_time: "12:00" },
+    ];
+    expect(weeklyRulesSchema.safeParse(rules).success).toBe(true);
+  });
+  it("recusa fim antes do início e horário inválido", () => {
+    expect(weeklyRuleSchema.safeParse({ weekday: 1, start_time: "12:00", end_time: "08:00" }).success).toBe(false);
+    expect(weeklyRuleSchema.safeParse({ weekday: 1, start_time: "08:00", end_time: "08:00" }).success).toBe(false);
+    expect(weeklyRuleSchema.safeParse({ weekday: 1, start_time: "8:00", end_time: "12:00" }).success).toBe(false);
+    expect(weeklyRuleSchema.safeParse({ weekday: 7, start_time: "08:00", end_time: "12:00" }).success).toBe(false);
+  });
+  it("recusa sobreposição no mesmo dia, em qualquer ordem", () => {
+    const rules = [
+      { weekday: 3, start_time: "14:00", end_time: "18:00" },
+      { weekday: 3, start_time: "08:00", end_time: "15:00" },
+    ];
+    expect(findOverlap(rules)).toEqual(rules[0]);
+    expect(weeklyRulesSchema.safeParse(rules).success).toBe(false);
+    expect(findOverlap([rules[0], { ...rules[1], weekday: 4 }])).toBeNull();
+  });
+});
+
+describe("exceptionSchema", () => {
+  it("dia bloqueado não precisa de horário", () => {
+    expect(exceptionSchema.parse({ is_blocked: true, date: "2026-12-25", reason: "" })).toEqual({
+      is_blocked: true,
+      date: "2026-12-25",
+      reason: null,
+    });
+  });
+  it("horário especial precisa de intervalo válido", () => {
+    expect(
+      exceptionSchema.safeParse({ is_blocked: false, date: "2026-12-24", start_time: "08:00", end_time: "12:00" }).success,
+    ).toBe(true);
+    expect(
+      exceptionSchema.safeParse({ is_blocked: false, date: "2026-12-24", start_time: "12:00", end_time: "08:00" }).success,
+    ).toBe(false);
+    expect(exceptionSchema.safeParse({ is_blocked: false, date: "2026-12-24" }).success).toBe(false);
+  });
+  it("recusa data inválida", () => {
+    expect(exceptionSchema.safeParse({ is_blocked: true, date: "2026-13-01" }).success).toBe(false);
   });
 });

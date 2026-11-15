@@ -7,7 +7,14 @@ import { fail, ok, type ActionResult } from "@/lib/action-result";
 import { requireProfile } from "@/lib/auth";
 import { PLATFORMS, toSocialHref } from "@/lib/social";
 import { isThemeKey } from "@/lib/theme";
-import { profileSchema, type ProfileInput } from "@/lib/validation/schemas";
+import {
+  exceptionSchema,
+  profileSchema,
+  weeklyRulesSchema,
+  type ExceptionInput,
+  type ProfileInput,
+  type WeeklyRuleInput,
+} from "@/lib/validation/schemas";
 
 type Profile = Awaited<ReturnType<typeof requireProfile>>["profile"];
 
@@ -197,5 +204,80 @@ export async function updateAppointmentStatus(id: string, action: StatusAction):
   if (!data?.length) return fail("Esse agendamento mudou enquanto você olhava. Atualize a página.");
 
   revalidatePath("/dashboard", "layout");
+  return ok();
+}
+
+// ---------------------------------------------------------------------------
+// Disponibilidade: horários semanais e exceções
+// ---------------------------------------------------------------------------
+
+function revalidateAvailability(profile: Pick<Profile, "username">) {
+  revalidatePath("/dashboard", "layout");
+  revalidatePath(`/${profile.username}/agendar`);
+}
+
+/** Troca todos os horários semanais. Insere os novos antes de apagar os antigos: falha não perde nada. */
+export async function saveWeeklyRules(input: WeeklyRuleInput[]): Promise<ActionResult> {
+  const parsed = weeklyRulesSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error.issues[0].message);
+
+  const { profile, supabase } = await requireProfile();
+  const { data: old, error: loadError } = await supabase
+    .from("availability_rules")
+    .select("id")
+    .eq("profile_id", profile.id);
+  if (loadError) return fail("Não foi possível salvar. Tente novamente.");
+
+  if (parsed.data.length > 0) {
+    const { error } = await supabase
+      .from("availability_rules")
+      .insert(parsed.data.map((r) => ({ ...r, profile_id: profile.id })));
+    if (error) return fail("Não foi possível salvar. Tente novamente.");
+  }
+
+  if (old.length > 0) {
+    const { error } = await supabase
+      .from("availability_rules")
+      .delete()
+      .in(
+        "id",
+        old.map((r) => r.id),
+      )
+      .eq("profile_id", profile.id);
+    if (error) return fail("Horários salvos, mas os antigos não foram removidos. Salve de novo.");
+  }
+
+  revalidateAvailability(profile);
+  return ok();
+}
+
+export async function addException(input: ExceptionInput): Promise<ActionResult> {
+  const parsed = exceptionSchema.safeParse(input);
+  if (!parsed.success) return fail("Confira os campos", z.flattenError(parsed.error).fieldErrors);
+
+  const { profile, supabase } = await requireProfile();
+  const e = parsed.data;
+  const { error } = await supabase.from("availability_exceptions").insert({
+    profile_id: profile.id,
+    date: e.date,
+    is_blocked: e.is_blocked,
+    start_time: e.is_blocked ? null : e.start_time,
+    end_time: e.is_blocked ? null : e.end_time,
+    reason: e.reason,
+  });
+  if (error) return fail("Não foi possível salvar. Tente novamente.");
+
+  revalidateAvailability(profile);
+  return ok();
+}
+
+export async function deleteException(id: string): Promise<ActionResult> {
+  if (!z.uuid().safeParse(id).success) return fail("Exceção inválida");
+
+  const { profile, supabase } = await requireProfile();
+  const { error } = await supabase.from("availability_exceptions").delete().eq("id", id).eq("profile_id", profile.id);
+  if (error) return fail("Não foi possível remover. Tente novamente.");
+
+  revalidateAvailability(profile);
   return ok();
 }

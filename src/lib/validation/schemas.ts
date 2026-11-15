@@ -147,3 +147,55 @@ export function appointmentSchemaFor(settings: { require_cpf: boolean; require_p
     }
   });
 }
+
+// ---------------------------------------------------------------------------
+// Disponibilidade: horários semanais e exceções
+// ---------------------------------------------------------------------------
+
+const timeSchema = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Horário inválido");
+
+const intervalRefine = <T extends { start_time: string; end_time: string }>(i: T) => i.end_time > i.start_time;
+
+export const weeklyRuleSchema = z
+  .object({
+    weekday: z.number().int().min(0).max(6),
+    start_time: timeSchema,
+    end_time: timeSchema,
+  })
+  .refine(intervalRefine, { path: ["end_time"], message: "O fim precisa ser depois do início" });
+
+export type WeeklyRuleInput = z.input<typeof weeklyRuleSchema>;
+
+/** Intervalos do mesmo dia não podem se sobrepor (encostar pode: 08–12 e 12–14). */
+export function findOverlap(rules: WeeklyRuleInput[]): WeeklyRuleInput | null {
+  const sorted = [...rules].sort((a, b) => a.weekday - b.weekday || a.start_time.localeCompare(b.start_time));
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    if (sorted[i].weekday === prev.weekday && sorted[i].start_time < prev.end_time) return sorted[i];
+  }
+  return null;
+}
+
+export const weeklyRulesSchema = z
+  .array(weeklyRuleSchema)
+  .max(50, "Intervalos demais")
+  .refine((rules) => findOverlap(rules) === null, "Há intervalos sobrepostos no mesmo dia");
+
+export const exceptionSchema = z
+  .discriminatedUnion("is_blocked", [
+    z.object({
+      is_blocked: z.literal(true),
+      date: z.iso.date("Data inválida"),
+      reason: optionalText(200, "Máximo de 200 caracteres"),
+    }),
+    z.object({
+      is_blocked: z.literal(false),
+      date: z.iso.date("Data inválida"),
+      start_time: timeSchema,
+      end_time: timeSchema,
+      reason: optionalText(200, "Máximo de 200 caracteres"),
+    }),
+  ])
+  .refine((e) => e.is_blocked || intervalRefine(e), { path: ["end_time"], message: "O fim precisa ser depois do início" });
+
+export type ExceptionInput = z.input<typeof exceptionSchema>;
